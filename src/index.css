@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  border-color: hsl(214.3 31.8% 91.4%);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: hsl(0 0% 100%);
+  color: hsl(222.2 84% 4.9%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Smooth transitions for interactive elements */
+@layer utilities {
+  .transition-smoothest {
+    transition: all 0.15s ease-in-out;
+  }
+
+  .transition-smooth {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .transition-moderate {
+    transition: all 0.3s ease-in-out;
+  }
+}
+
+/* Shimmer effect for skeleton loaders */
+@layer components {
+  .skeleton-shimmer {
+    background: linear-gradient(90deg,
+        #f1f5f9 0%,
+        #e2e8f0 20%,
+        #f1f5f9 40%,
+        #f1f5f9 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+}

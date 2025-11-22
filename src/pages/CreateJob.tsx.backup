@@ -1,0 +1,322 @@
+import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Wand2, Check, Loader2, Upload, FileText } from 'lucide-react';
+import { jobsService, type Job } from '../services/jobs';
+import { showSuccess, showError } from '../lib/toast';
+
+export default function CreateJob() {
+    const navigate = useNavigate();
+    const [step, setStep] = useState<'input' | 'review'>('input');
+    const [jdText, setJdText] = useState('');
+    const [parsing, setParsing] = useState(false);
+    const [parsedJob, setParsedJob] = useState<Partial<Job>>({});
+    const [saving, setSaving] = useState(false);
+    const [dealBreakers, setDealBreakers] = useState({
+        location_match: false,
+        no_sponsorship: false,
+        onsite_required: false
+    });
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploadedFileName, setUploadedFileName] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = async (file: File) => {
+        if (!file) return;
+
+        setUploadedFileName(file.name);
+        setParsing(true);
+
+        try {
+            const text = await file.text();
+            setJdText(text);
+
+            // Auto-parse the uploaded file
+            const result = await jobsService.parseJobDescription(text);
+            setParsedJob(result);
+            setStep('review');
+            showSuccess(`Job description uploaded and parsed from ${file.name}`);
+        } catch (error) {
+            console.error('File upload failed', error);
+            showError('Failed to process uploaded file');
+        } finally {
+            setParsing(false);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const file = e.dataTransfer.files[0];
+        if (file && (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md'))) {
+            handleFileUpload(file);
+        } else {
+            showError('Please upload a .txt or .md file');
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = () => {
+        setIsDragging(false);
+    };
+
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleFileUpload(file);
+        }
+    };
+
+    const handleParse = async () => {
+        if (!jdText.trim()) return;
+        setParsing(true);
+        try {
+            const result = await jobsService.parseJobDescription(jdText);
+            setParsedJob(result);
+            setStep('review');
+            showSuccess('Job description parsed successfully');
+        } catch (error) {
+            console.error('Parsing failed', error);
+            showError('Failed to parse job description');
+        } finally {
+            setParsing(false);
+        }
+    };
+
+    const handleCreate = async () => {
+        setSaving(true);
+        try {
+            const jobToCreate = {
+                ...parsedJob,
+                status: 'published',
+                requirements: parsedJob.requirements || [],
+                responsibilities: parsedJob.responsibilities || [],
+                deal_breakers: JSON.stringify(dealBreakers)
+            } as any;
+
+            await jobsService.createJob(jobToCreate);
+            navigate('/jobs');
+        } catch (error) {
+            console.error('Creation failed', error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="mx-auto max-w-3xl space-y-6">
+            <button
+                onClick={() => navigate('/jobs')}
+                className="flex items-center text-sm text-slate-500 hover:text-slate-900"
+            >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Jobs
+            </button>
+
+            <div>
+                <h1 className="text-2xl font-bold text-slate-900">Create New Job</h1>
+                <p className="text-sm text-slate-500">Paste your job description to automatically extract details.</p>
+            </div>
+
+            {step === 'input' ? (
+                <div className="space-y-6">
+                    {/* File Upload Section */}
+                    <div
+                        className={`rounded-lg border-2 border-dashed bg-white p-8 text-center transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300'
+                            }`}
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                    >
+                        <Upload className="mx-auto h-12 w-12 text-slate-400 mb-4" />
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2">Upload Job Description</h3>
+                        <p className="text-sm text-slate-500 mb-4">
+                            Drag and drop a .txt or .md file here, or click to browse
+                        </p>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".txt,.md,text/plain,text/markdown"
+                            onChange={handleFileInputChange}
+                            className="hidden"
+                        />
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                            <FileText className="h-4 w-4" />
+                            Choose File
+                        </button>
+                        {uploadedFileName && (
+                            <p className="mt-3 text-sm text-green-600">
+                                ✓ Uploaded: {uploadedFileName}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="flex items-center gap-4">
+                        <div className="flex-1 border-t border-slate-300"></div>
+                        <span className="text-sm text-slate-500 font-medium">OR</span>
+                        <div className="flex-1 border-t border-slate-300"></div>
+                    </div>
+
+                    {/* Text Input Section */}
+                    <div className="space-y-4 rounded-lg border bg-white p-6 shadow-sm">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700">Paste Job Description</label>
+                            <textarea
+                                value={jdText}
+                                onChange={(e) => setJdText(e.target.value)}
+                                placeholder="Paste the full job description here..."
+                                className="h-64 w-full rounded-md border border-slate-200 p-4 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="flex justify-end">
+                            <button
+                                onClick={handleParse}
+                                disabled={!jdText.trim() || parsing}
+                                className="flex items-center gap-2 rounded-md bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                            >
+                                {parsing ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Analyzing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Wand2 className="mr-2 h-4 w-4" />
+                                        Analyze & Extract
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                    ) : (
+                    <div className="space-y-6">
+                        <div className="space-y-6">
+                            <div className="rounded-lg border bg-white p-6 shadow-sm">
+                                <h3 className="mb-4 text-lg font-medium text-slate-900">Review Extracted Details</h3>
+                                <div className="grid gap-6 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-700">Job Title</label>
+                                        <input
+                                            type="text"
+                                            value={parsedJob.title}
+                                            onChange={(e) => setParsedJob({ ...parsedJob, title: e.target.value })}
+                                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-700">Department</label>
+                                        <input
+                                            type="text"
+                                            value={parsedJob.department}
+                                            onChange={(e) => setParsedJob({ ...parsedJob, department: e.target.value })}
+                                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-700">Location</label>
+                                        <input
+                                            type="text"
+                                            value={parsedJob.location}
+                                            onChange={(e) => setParsedJob({ ...parsedJob, location: e.target.value })}
+                                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-700">Employment Type</label>
+                                        <select
+                                            value={parsedJob.type}
+                                            onChange={(e) => setParsedJob({ ...parsedJob, type: e.target.value })}
+                                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        >
+                                            <option>Full-time</option>
+                                            <option>Part-time</option>
+                                            <option>Contract</option>
+                                            <option>Internship</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Deal-Breakers Section */}
+                            <div className="rounded-lg border bg-white p-6 shadow-sm">
+                                <h3 className="mb-4 text-lg font-medium text-slate-900">Deal-Breakers</h3>
+                                <p className="mb-4 text-sm text-slate-500">Define requirements that candidates must meet</p>
+                                <div className="space-y-3">
+                                    <label className="flex items-start gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={dealBreakers.location_match}
+                                            onChange={(e) => setDealBreakers({ ...dealBreakers, location_match: e.target.checked })}
+                                            className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <div>
+                                            <div className="text-sm font-medium text-slate-900">Location Match Required</div>
+                                            <div className="text-xs text-slate-500">Candidate must be in or willing to relocate to job location</div>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-start gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={dealBreakers.no_sponsorship}
+                                            onChange={(e) => setDealBreakers({ ...dealBreakers, no_sponsorship: e.target.checked })}
+                                            className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <div>
+                                            <div className="text-sm font-medium text-slate-900">No Visa Sponsorship</div>
+                                            <div className="text-xs text-slate-500">Candidate must be authorized to work without sponsorship</div>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-start gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={dealBreakers.onsite_required}
+                                            onChange={(e) => setDealBreakers({ ...dealBreakers, onsite_required: e.target.checked })}
+                                            className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <div>
+                                            <div className="text-sm font-medium text-slate-900">On-site Work Required</div>
+                                            <div className="text-xs text-slate-500">Candidate must work on-site (no remote)</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setStep('input')}
+                                    className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                                >
+                                    Back to Edit
+                                </button>
+                                <button
+                                    onClick={handleCreate}
+                                    disabled={saving}
+                                    className="flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                >
+                                    {saving ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="mr-2 h-4 w-4" />
+                                            Publish Job
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+            )}
+        </div>
+    );
+}
